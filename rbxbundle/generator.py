@@ -264,7 +264,7 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
 
     # ---------------------------
     # Dependency graph outputs
-    # ---------------------------
+    # ----------------------------
 
     try:
         dep_scripts = [

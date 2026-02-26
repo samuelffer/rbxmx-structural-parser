@@ -59,7 +59,7 @@ class RequireEdge:
 
 # ---------------------------
 # Public API
-# ---------------------------
+# ----------------------------
 
 
 def build_dependency_graph(

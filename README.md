@@ -1,4 +1,4 @@
-# RBXBundle
+# rbxbundle
 
 Roblox RBXMX/XML bundle extractor.
 
