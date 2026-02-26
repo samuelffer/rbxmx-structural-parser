@@ -1,4 +1,4 @@
-# rbxbundle
+# RBXBundle
 
 Roblox RBXMX/XML bundle extractor.
 
@@ -63,7 +63,6 @@ Bundle contents:
 
 * No dependency graph
 * No require resolution
-* No attribute parsing
 * Invalid XML may fail
 
 ---
