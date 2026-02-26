@@ -1,4 +1,4 @@
-# rbxmx-structural-parser
+# rbxbundle
 
 **Roblox Bundle Extractor (bundle-only)**  
 Extrai e estrutura arquivos `.rbxmx/.xml/.txt` contendo XML de modelos Roblox e gera um bundle organizado com hierarquia, índice e scripts separados.
