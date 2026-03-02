@@ -187,6 +187,31 @@ class TestParseAttributes(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0], ("Speed", "number", "100"))
 
+    def test_broken_attributes_serialize_falls_back_to_xml_with_warning(self):
+        item = ET.Element("Item", attrib={"class": "Script"})
+        props = ET.SubElement(item, "Properties")
+
+        broken = ET.SubElement(props, "BinaryString", attrib={"name": "AttributesSerialize"})
+        broken.text = "AAAA"  # decodes, but binary parser fails predictably
+
+        attrs_node = ET.SubElement(props, "Attributes")
+        attr = ET.SubElement(attrs_node, "Attribute", attrib={"name": "Speed", "type": "number"})
+        attr.text = "120"
+
+        with self.assertLogs("rbxbundle", level="WARNING") as logs:
+            result = parse_attributes(
+                props,
+                source_file="model.rbxmx",
+                section="Properties",
+                owner_path="Workspace/Runner",
+            )
+
+        self.assertEqual(result, [("Speed", "number", "120")])
+        self.assertTrue(any("attributes_serialize_parse_failed" in msg for msg in logs.output))
+        self.assertTrue(any("file=model.rbxmx" in msg for msg in logs.output))
+        self.assertTrue(any("owner_path=Workspace/Runner" in msg for msg in logs.output))
+
+
 
 # ---------------------------------------------------------------------------
 # BinReader

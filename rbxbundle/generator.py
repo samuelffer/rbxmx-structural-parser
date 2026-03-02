@@ -146,7 +146,12 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
 
         hierarchy_lines.append(f"{' ' * depth}- {safe_name} ({class_name})")
 
-        for aname, atype, aval in parse_attributes(props):
+        for aname, atype, aval in parse_attributes(
+            props,
+            source_file=in_path.name,
+            section="Properties",
+            owner_path=full_path,
+        ):
             attributes.append(AttributeRecord(class_name, name, full_path, aname, atype, aval))
 
         if include_context and class_name in CONTEXT_CLASSES:
@@ -308,12 +313,31 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
                     loc.get("line"),
                 ])
 
-    except Exception as e:
+    except (AttributeError, ValueError, TypeError, KeyError) as e:
+        LOG.error(
+            "dependency_extraction_failed file=%s section=dependencies data_type=graph error=%s",
+            in_path.name,
+            e,
+        )
+        dep_error = "\n".join(
+            [
+                "Dependency extraction failed.",
+                f"File: {in_path.name}",
+                "Section: dependencies",
+                "Data type: graph",
+                f"Error type: {type(e).__name__}",
+                f"Error: {e}",
+                "",
+            ]
+        )
         safe_write_text(
             bundle_dir / "DEPENDENCIES_ERROR.txt",
-            f"Dependency extraction failed: {e}\n",
+            dep_error,
             encoding="utf-8",
         )
+        raise RuntimeError(
+            "Dependency extraction failed; see DEPENDENCIES_ERROR.txt for details."
+        ) from e
 
     # SUMMARY.md
     try:
@@ -327,8 +351,12 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
             include_context=include_context,
         )
         safe_write_text(bundle_dir / "SUMMARY.md", summary_md, encoding="utf-8")
-    except Exception as e:
-        LOG.warning("SUMMARY.md generation failed: %s", e)
+    except (KeyError, TypeError, ValueError) as e:
+        LOG.warning(
+            "summary_generation_failed file=%s section=SUMMARY.md data_type=document error=%s",
+            in_path.name,
+            e,
+        )
 
     # ZIP bundle
     zip_path = output_dir / f"{in_path.stem}_bundle.zip"

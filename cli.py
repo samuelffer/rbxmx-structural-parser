@@ -185,7 +185,7 @@ def _run_build(in_path: Path, out_dir: Path, include_context: bool) -> int:
         bundle_dir, zip_path, scripts = create_bundle(
             in_path, output_dir=out_dir, include_context=include_context
         )
-    except Exception as exc:
+    except (RuntimeError, OSError, ValueError) as exc:
         return None, None, None, str(exc)
 
     nonempty = sum(1 for s in scripts if s.source_len > 0)
@@ -272,8 +272,12 @@ def _imode_build() -> None:
         _info(f"Scripts   {clr(WHT, str(stats['scripts']))}")
         _info(f"Instances {clr(WHT, str(stats['instances']))}")
         print()
-    except Exception:
-        pass
+    except (ET.ParseError, OSError, ValueError) as exc:
+        LOG.warning(
+            "inspect_preview_failed file=%s section=inspect_preview data_type=xml error=%s",
+            chosen,
+            exc,
+        )
 
     include_context = _yn("Include CONTEXT.txt? (RemoteEvents, ValueObjects…)", default_yes=True)
     out_dir = DEFAULT_OUTPUT_DIR
@@ -351,7 +355,7 @@ def _imode_inspect() -> None:
             pad = " " * (label_w - len(label))
             print(f"  {clr(GRY, label)}{pad}{clr(WHT, value)}")
         print()
-    except Exception as exc:
+    except (ET.ParseError, OSError, ValueError) as exc:
         _err(f"Could not inspect file: {exc}")
 
     _prompt("Press Enter to go back.")
@@ -478,7 +482,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     except ET.ParseError as exc:
         _err(f"XML parse error: {exc}")
         return 1
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
         _err(f"Failed to inspect: {exc}")
         return 1
 
