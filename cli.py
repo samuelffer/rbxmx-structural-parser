@@ -24,6 +24,7 @@ import textwrap
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from rbxbundle import __version__
 from rbxbundle.generator import CONTEXT_CLASSES, SCRIPT_CLASSES, create_bundle
 from rbxbundle.parser import iter_top_level_items
 from rbxbundle.utils import (
@@ -91,7 +92,7 @@ def _banner() -> None:
     print()
     _print_hr("═", BLU)
     title = "  RBX BUNDLE"
-    ver   = "v0.4.1  "
+    ver   = f"v{__version__}  "
     pad   = w - len(title) - len(ver) - 2
     print(f"{clr(B+BLU, title)}{' ' * max(pad, 1)}{clr(GRY, ver)}")
     print(clr(GRY, "  .rbxmx Context Bundler"))
