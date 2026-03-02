@@ -24,6 +24,12 @@ import textwrap
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from rbxbundle.generator import (
+    CONTEXT_CLASSES,
+    SCRIPT_CLASSES,
+    ScriptRecord,
+    create_bundle,
+)
 from rbxbundle import __version__
 from rbxbundle.generator import CONTEXT_CLASSES, SCRIPT_CLASSES, create_bundle
 from rbxbundle.parser import iter_top_level_items
@@ -180,7 +186,11 @@ def _inspect_file(in_path: Path) -> dict:
         "context": context_count,
     }
 
-def _run_build(in_path: Path, out_dir: Path, include_context: bool) -> int:
+def _run_build(
+    in_path: Path,
+    out_dir: Path,
+    include_context: bool,
+) -> tuple[Path | None, Path | None, list[ScriptRecord] | None, str | None]:
     """Core build logic shared by interactive and argparse modes."""
     try:
         bundle_dir, zip_path, scripts = create_bundle(
@@ -189,7 +199,6 @@ def _run_build(in_path: Path, out_dir: Path, include_context: bool) -> int:
     except Exception as exc:
         return None, None, None, str(exc)
 
-    nonempty = sum(1 for s in scripts if s.source_len > 0)
     return bundle_dir, zip_path, scripts, None   # err=None means success
 
 
@@ -269,7 +278,7 @@ def _imode_build() -> None:
     # Quick inspect preview
     try:
         stats = _inspect_file(chosen)
-        _info(f"Size      " + clr(WHT, f"{stats['size_kb']:.1f} KB"))
+        _info("Size      " + clr(WHT, f"{stats['size_kb']:.1f} KB"))
         _info(f"Scripts   {clr(WHT, str(stats['scripts']))}")
         _info(f"Instances {clr(WHT, str(stats['instances']))}")
         print()
@@ -291,6 +300,11 @@ def _imode_build() -> None:
 
     if err:
         _err(f"Build failed: {err}")
+        _prompt("Press Enter to go back.")
+        return
+
+    if scripts is None or bundle_dir is None or zip_path is None:
+        _err("Build failed: unexpected empty result.")
         _prompt("Press Enter to go back.")
         return
 
@@ -443,7 +457,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     include_context = not args.no_context
 
     _print_hr("═", BLU)
-    _ok(f"rbxbundle build")
+    _ok("rbxbundle build")
     _info(f"Input   {clr(WHT, str(in_path.resolve()))}")
     _info(f"Output  {clr(WHT, str(out_dir.resolve()))}")
     _info(f"Context {clr(GRN, 'yes') if include_context else clr(GRY, 'no')}")
@@ -453,6 +467,10 @@ def cmd_build(args: argparse.Namespace) -> int:
 
     if err:
         _err(f"Build failed: {err}")
+        return 1
+
+    if scripts is None or bundle_dir is None or zip_path is None:
+        _err("Build failed: unexpected empty result.")
         return 1
 
     nonempty = sum(1 for s in scripts if s.source_len > 0)
