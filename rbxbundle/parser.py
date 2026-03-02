@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import base64
+import logging
 import struct
 from typing import List, Optional, Tuple
 import xml.etree.ElementTree as ET
 
 from .utils import local_tag
+
+LOG = logging.getLogger("rbxbundle")
 
 def get_properties_node(item: ET.Element) -> Optional[ET.Element]:
     for child in item:
@@ -140,7 +143,13 @@ def decode_attributes_serialize(blob: bytes) -> List[Tuple[str, str, str]]:
             break
     return out
 
-def parse_attributes(props: Optional[ET.Element]) -> List[Tuple[str, str, str]]:
+def parse_attributes(
+    props: Optional[ET.Element],
+    *,
+    source_file: str = "<unknown>",
+    section: str = "Properties",
+    owner_path: str = "<unknown>",
+) -> List[Tuple[str, str, str]]:
     if props is None:
         return []
     for p in props:
@@ -150,13 +159,26 @@ def parse_attributes(props: Optional[ET.Element]) -> List[Tuple[str, str, str]]:
                 return []
             try:
                 blob = base64.b64decode(b64, validate=False)
-            except Exception:
+            except (ValueError, TypeError) as exc:
+                LOG.warning(
+                    "attributes_serialize_decode_failed file=%s section=%s data_type=AttributesSerialize owner_path=%s error=%s",
+                    source_file,
+                    section,
+                    owner_path,
+                    exc,
+                )
                 blob = b""
             if blob:
                 try:
                     return decode_attributes_serialize(blob)
-                except Exception:
-                    pass
+                except ValueError as exc:
+                    LOG.warning(
+                        "attributes_serialize_parse_failed file=%s section=%s data_type=AttributesSerialize owner_path=%s error=%s",
+                        source_file,
+                        section,
+                        owner_path,
+                        exc,
+                    )
     out: List[Tuple[str, str, str]] = []
     for node in props:
         if local_tag(node.tag) != "Attributes":
