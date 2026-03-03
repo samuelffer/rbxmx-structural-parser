@@ -10,7 +10,7 @@
 #   python cli.py --mode interactive
 #   python cli.py --mode argparse
 #
-# Settings are persisted in rbxbundle.json (same folder as this file).
+# Settings are persisted per-user (AppData/.config).
 #
 #==========================================================================================================
 
@@ -50,12 +50,22 @@ DEFAULT_OUTPUT_DIR = Path("output")
 LOG = logging.getLogger("rbxbundle")
 
 # Sub-commands that trigger argparse mode
-_ARGPARSE_COMMANDS = {"build", "inspect", "list", "help", "--help", "-h"}
+_ARGPARSE_COMMANDS = {"build", "inspect", "list", "help", "--help", "-h", "--version"}
 
 # ===== Config (persisted settings) ========================================
 
-# Config lives next to cli.py — easy to find, edit, and version-control.
-_CONFIG_PATH = Path(__file__).parent / "rbxbundle.json"
+def _resolve_config_path() -> Path:
+    """Return the per-user config file path for the current OS."""
+    if os.name == "nt":
+        base = os.environ.get("APPDATA")
+        if base:
+            return Path(base) / "rbxbundle" / "rbxbundle.json"
+        # Safe fallback if APPDATA is unavailable.
+        return Path.home() / ".rbxbundle" / "rbxbundle.json"
+    return Path.home() / ".config" / "rbxbundle" / "rbxbundle.json"
+
+
+_CONFIG_PATH = _resolve_config_path()
 _DEFAULT_CONFIG: dict = {
     "startup_mode": "interactive",   # "interactive" | "argparse"
     "input_dir":    str(DEFAULT_INPUT_DIR),
@@ -75,9 +85,10 @@ def _load_config() -> dict:
 
 def _save_config(cfg: dict) -> None:
     try:
+        _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         _CONFIG_PATH.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     except OSError as exc:
-        LOG.warning("Could not save config: %s", exc)
+        LOG.warning("Could not save config at %s: %s", _CONFIG_PATH, exc)
 
 
 
@@ -512,7 +523,7 @@ def _imode_settings(cfg: dict) -> dict:
         _info(f"Startup mode  {mode_label}")
         _info(f"Input  dir    {clr(WHT, str(Path(cfg['input_dir']).resolve()))}")
         _info(f"Output dir    {clr(WHT, str(Path(cfg['output_dir']).resolve()))}")
-        _info(f"Config file   {clr(GRY, str(_CONFIG_PATH.name))}  {clr(DIM, f'({_CONFIG_PATH})')}")
+        _info(f"Config file   {clr(WHT, str(_CONFIG_PATH))}")
         print()
         print(f"  {clr(B+CYN,  '[1]')}  Toggle startup mode  {clr(GRY, '— interactive ↔ argparse')}")
         print(f"  {clr(B+YLW,  '[2]')}  Change input directory")
@@ -565,11 +576,11 @@ def cmd_build(args: argparse.Namespace) -> int:
     in_path = Path(args.file)
 
     if not in_path.exists():
-        print(f"  error: file not found: {in_path}", file=sys.stderr)
+        print(f"  Error: file not found: {in_path}.", file=sys.stderr)
         return 1
 
     if in_path.suffix.lower() not in SUPPORTED_EXTS:
-        print(f"  warning: extension '{in_path.suffix}' is not officially supported, proceeding anyway.")
+        print(f"  Warning: extension '{in_path.suffix}' is not officially supported; proceeding anyway.")
 
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -584,17 +595,17 @@ def cmd_build(args: argparse.Namespace) -> int:
     bundle_dir, zip_path, scripts, err = _run_build(in_path, out_dir, include_context)
 
     if err:
-        print(f"  {clr(RED, 'error:')} {err}", file=sys.stderr)
+        print(f"  {clr(RED, 'Error:')} {err}", file=sys.stderr)
         return 1
 
     if scripts is None or bundle_dir is None or zip_path is None:
-        print(f"  {clr(RED, 'error:')} unexpected empty result.", file=sys.stderr)
+        print(f"  {clr(RED, 'Error:')} unexpected empty result.", file=sys.stderr)
         return 1
 
     nonempty = sum(1 for s in scripts if s.source_len > 0)
     empty    = len(scripts) - nonempty
 
-    print(f"  {clr(GRN, '✔')}  done")
+    print(f"  {clr(GRN, '✔')}  Done.")
     print(f"  {'scripts':<10} {len(scripts)}  {clr(GRY, f'({nonempty} with code, {empty} empty)')}")
     print(f"  {'bundle':<10} {clr(WHT, str(bundle_dir))}")
     print(f"  {'zip':<10} {clr(BLU, str(zip_path))}")
@@ -606,16 +617,16 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     in_path = Path(args.file)
 
     if not in_path.exists():
-        print(f"  error: file not found: {in_path}", file=sys.stderr)
+        print(f"  Error: file not found: {in_path}.", file=sys.stderr)
         return 1
 
     try:
         stats = _inspect_file(in_path)
     except ET.ParseError as exc:
-        print(f"  error: XML parse error: {exc}", file=sys.stderr)
+        print(f"  Error: XML parse error: {exc}.", file=sys.stderr)
         return 1
     except (OSError, ValueError) as exc:
-        print(f"  error: {exc}", file=sys.stderr)
+        print(f"  Error: {exc}.", file=sys.stderr)
         return 1
 
     print(f"\n  {clr(B+BLU, 'rbxbundle inspect')}")
@@ -636,7 +647,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     in_dir = Path(args.dir)
 
     if not in_dir.exists():
-        print(f"  error: directory not found: {in_dir}", file=sys.stderr)
+        print(f"  Error: directory not found: {in_dir}.", file=sys.stderr)
         return 1
 
     files = _scan_files(in_dir)
@@ -645,7 +656,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     print()
 
     if not files:
-        print(f"  {clr(GRY, 'no supported files found.')}")
+        print(f"  {clr(GRY, 'No supported files found.')}")
         print(f"  {clr(GRY, 'supported: ' + ', '.join(sorted(SUPPORTED_EXTS)))}")
     else:
         name_w = max(len(f.name) for f in files) + 2
@@ -671,6 +682,7 @@ def _build_argparser() -> argparse.ArgumentParser:
               rbxbundle list
               rbxbundle list --dir ./models
               rbxbundle --mode interactive
+              rbxbundle --version
         """),
     )
 
@@ -680,6 +692,7 @@ def _build_argparser() -> argparse.ArgumentParser:
         metavar="MODE",
         help="Set and save the default startup mode  (interactive | argparse).",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     # --verbose is intentionally kept but suppressed from help — it's a dev tool
     parser.add_argument("--verbose", "-v", action="store_true", help=argparse.SUPPRESS)
 
