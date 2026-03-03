@@ -38,7 +38,7 @@ Roblox XML exports are noisy and token-heavy. Sending a raw `.rbxmx` or `.xml` f
 Download `rbxbundle.exe` from the GitHub Releases page.
 
 Recommended:
-1. Create a folder such as `Documents/rbxbundle/`
+1. Create a folder such as `Documents/rbxbundle/` or use it in the root folder where you extracted the.exe
 2. Place `rbxbundle.exe` inside that folder
 3. Open the executable to use the interactive interface
 
