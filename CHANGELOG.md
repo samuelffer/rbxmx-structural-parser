@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.6] - 2026-03-03
+
+### Added
+- Added `WARNINGS.txt` with placement and source-heuristic warnings for suspicious client/server script usage.
+- Added `HIERARCHY_MIN.txt` as a reduced hierarchy view for scripts, remotes, bindables, common config objects, and key assets.
+- Added `MANIFEST.json` with generator version, timestamp, input filename, SHA-256, and bundle counts.
+- Added disabled-script metadata to exported script headers, `INDEX.csv`, and dependency graph nodes.
+- Added summary entry-point sections for enabled client and server scripts.
+- Added regression coverage for disabled metadata, warnings output, minimal hierarchy export, and manifest generation.
+
+### Changed
+- `SUMMARY.md` now highlights entry points, marks disabled scripts, and separates disabled scripts into their own section.
+- Bundle guidance in `SUMMARY.md` now references the new manifest, warnings, and minimal hierarchy outputs.
+
+### Fixed
+- Fixed script execution-side classification so `Script` instances respect `RunContext` instead of relying only on class name.
+- Fixed script export naming, metadata, and summary counts for `Script` instances running as client or server via `RunContext`.
+
 ## [0.5.5] - 2026-03-03
 
 ### Fixed
