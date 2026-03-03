@@ -47,6 +47,12 @@ Check the installed version:
 rbxbundle --version
 ```
 
+Default workspace paths:
+- Installed command-line usage defaults to `~/Documents/rbxbundle/`
+- Input files go in `~/Documents/rbxbundle/input/`
+- Generated bundles go to `~/Documents/rbxbundle/output/`
+- The standalone `.exe` keeps using the folder where the executable is located
+
 ## Quick start
 
 Open the interactive mode:
@@ -86,6 +92,7 @@ rbxbundle --version
 Notes:
 - Running `rbxbundle` with no arguments opens the interactive mode.
 - Use `build`, `inspect`, `list`, `--help`, or `--version` from a terminal for command-line usage.
+- If you type an invalid command, `rbxbundle` now returns a command-line error instead of falling back to interactive mode.
 
 Supported input extensions:
 - `.rbxmx`

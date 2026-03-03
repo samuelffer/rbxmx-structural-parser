@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.4] - 2026-03-03
+
+### Fixed
+- Fixed command-line routing so invalid arguments return an argparse error instead of opening interactive mode.
+
+### Changed
+- Default workspace for installed command-line usage now lives in `Documents/rbxbundle/`.
+- The standalone `.exe` continues to use the folder where the executable is located.
+- Updated README guidance for interactive mode, command-line usage, and default workspace paths.
+
 ## [0.5.3] - 2026-03-03
 
 ### Fixed

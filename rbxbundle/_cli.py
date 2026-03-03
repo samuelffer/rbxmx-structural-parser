@@ -27,11 +27,25 @@ from rbxbundle.utils import (
 )
 
 SUPPORTED_EXTS = {".rbxmx", ".rbxlx", ".xml", ".txt"}
-DEFAULT_INPUT_DIR = Path("input")
-DEFAULT_OUTPUT_DIR = Path("output")
 LOG = logging.getLogger("rbxbundle")
 
 _ARGPARSE_COMMANDS = {"build", "inspect", "list", "help", "--help", "-h", "--version"}
+
+
+def _resolve_default_workspace_root() -> Path:
+    """Return the default workspace root for interactive/CLI file operations."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+
+    documents_dir = Path.home() / "Documents"
+    if documents_dir.exists():
+        return documents_dir / "rbxbundle"
+    return Path.home() / "rbxbundle"
+
+
+_DEFAULT_WORKSPACE_ROOT = _resolve_default_workspace_root()
+DEFAULT_INPUT_DIR = _DEFAULT_WORKSPACE_ROOT / "input"
+DEFAULT_OUTPUT_DIR = _DEFAULT_WORKSPACE_ROOT / "output"
 
 
 def _resolve_config_path() -> Path:
@@ -299,20 +313,21 @@ def _imode_help() -> None:
     print()
     print(f"  {clr(GRY, 'Opening rbxbundle with no arguments starts the interactive mode.')}")
     print(f"  {clr(GRY, 'Passing commands directly runs the command-line interface instead.')}")
+    print(f"  {clr(GRY, f'Default workspace: {_DEFAULT_WORKSPACE_ROOT}')}")
     print()
 
     rows = [
         ("COMMAND", "DESCRIPTION"),
         ("", ""),
         ("rbxbundle build <file>", "Generate a full bundle from a Roblox file"),
-        ("  --output / -o  <dir>", "Output directory  (default: output/)"),
+        ("  --output / -o  <dir>", f"Output directory  (default: {DEFAULT_OUTPUT_DIR})"),
         ("  --no-context", "Skip CONTEXT.txt generation"),
         ("  --verbose / -v", "Enable debug logging"),
         ("", ""),
         ("rbxbundle inspect <file>", "Show stats without writing any output"),
         ("", ""),
-        ("rbxbundle list", "List supported files in input/"),
-        ("  --dir / -d  <dir>", "Directory to scan  (default: input/)"),
+        ("rbxbundle list", "List supported files in the default input directory"),
+        ("  --dir / -d  <dir>", f"Directory to scan  (default: {DEFAULT_INPUT_DIR})"),
         ("", ""),
         ("rbxbundle --help", "Show this reference and exit"),
     ]
@@ -684,15 +699,14 @@ def _build_argparser() -> argparse.ArgumentParser:
 
 
 def _should_use_argparse(args_passed: list[str]) -> bool:
-    """Return True only for explicit CLI-style invocations."""
-    if not args_passed:
-        return False
-    return args_passed[0] in _ARGPARSE_COMMANDS
+    """Return True whenever any CLI arguments are passed."""
+    return bool(args_passed)
 
 
 def main() -> None:
     cfg = _load_config()
     _apply_config_defaults(cfg)
+    ensure_dirs(DEFAULT_INPUT_DIR, DEFAULT_OUTPUT_DIR)
 
     args_passed = sys.argv[1:]
     use_argparse = _should_use_argparse(args_passed)

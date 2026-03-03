@@ -33,6 +33,10 @@ class TestCliConfigDefaults(unittest.TestCase):
         self.assertEqual(build_output.default, "custom-output")
         self.assertEqual(list_dir.default, "custom-input")
 
+    def test_default_workspace_root_ends_with_rbxbundle(self):
+        root = _cli._resolve_default_workspace_root()
+        self.assertEqual(root.name.lower(), "rbxbundle")
+
 
 class TestCliTextHelpers(unittest.TestCase):
     def test_helpers_use_ascii_markers(self):
@@ -49,3 +53,6 @@ class TestCliModeRouting(unittest.TestCase):
 
     def test_help_flag_uses_argparse(self):
         self.assertTrue(_cli._should_use_argparse(["--help"]))
+
+    def test_unknown_argument_still_uses_argparse(self):
+        self.assertTrue(_cli._should_use_argparse(["lisits"]))
