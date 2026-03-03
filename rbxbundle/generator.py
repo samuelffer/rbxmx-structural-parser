@@ -49,6 +49,18 @@ CONTEXT_CLASSES = {
 
 VALUE_OBJECT_CLASSES = {"StringValue", "NumberValue", "BoolValue", "IntValue", "ObjectValue"}
 
+SERVER_ONLY_PREFIXES = (
+    "ServerScriptService/",
+    "ServerStorage/",
+)
+
+CLIENT_ONLY_PREFIXES = (
+    "StarterPlayer/",
+    "StarterGui/",
+    "StarterPack/",
+    "ReplicatedFirst/",
+)
+
 
 @dataclass
 class ScriptRecord:
@@ -508,6 +520,44 @@ def generate_summary(
             lines.append("")
 
     lines += ["---", ""]
+
+    # --- Client/Server boundary alerts ---
+    lines += ["## Client/Server Boundary Alerts", ""]
+
+    scripts_by_path = {s.full_path: s for s in scripts}
+    boundary_alerts: List[str] = []
+
+    for e in edges_json:
+        origin = e.get("from")
+        dest = e.get("to")
+        if not origin or not dest:
+            continue
+
+        src_script = scripts_by_path.get(origin)
+        if not src_script:
+            continue
+
+        loc = e.get("loc") or {}
+        line_info = f" (line {loc['line']})" if loc.get("line") else ""
+
+        if src_script.class_name == "LocalScript" and dest.startswith(SERVER_ONLY_PREFIXES):
+            boundary_alerts.append(
+                f"- ⚠️ `{origin}` -> `{dest}`{line_info} "
+                "(LocalScript depending on server-only path)"
+            )
+
+        if src_script.class_name == "Script" and dest.startswith(CLIENT_ONLY_PREFIXES):
+            boundary_alerts.append(
+                f"- ⚠️ `{origin}` -> `{dest}`{line_info} "
+                "(Script depending on client-only path)"
+            )
+
+    if boundary_alerts:
+        lines.extend(boundary_alerts)
+    else:
+        lines.append("*(no client/server boundary alerts)*")
+    lines += ["", "---", ""]
+
 
     # --- Context section ---
     if include_context and contexts:

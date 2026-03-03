@@ -1,4 +1,4 @@
-"""Tests for rbxbundle.generator error handling."""
+#Tests for rbxbundle.generator error handling.
 
 from __future__ import annotations
 

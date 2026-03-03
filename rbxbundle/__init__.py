@@ -1,8 +1,6 @@
-"""rbxbundle — Roblox model extractor and AI context bundler."""
-
 from __future__ import annotations
 
-__version__ = "0.4.2"
+__version__ = "0.4.1"
 __author__ = "samuelffer"
 __license__ = "MIT"
 
