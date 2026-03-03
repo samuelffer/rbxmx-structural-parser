@@ -14,6 +14,8 @@ from .deps import Node, ScriptInfo, build_dependency_graph
 from .parser import (
     get_name,
     get_properties_node,
+    get_run_context,
+    get_run_context_name,
     get_source,
     get_value,
     iter_top_level_items,
@@ -61,6 +63,11 @@ CLIENT_ONLY_PREFIXES = (
     "ReplicatedFirst/",
 )
 
+RUN_CONTEXT_LEGACY = 0
+RUN_CONTEXT_SERVER = 1
+RUN_CONTEXT_CLIENT = 2
+RUN_CONTEXT_PLUGIN = 3
+
 
 @dataclass
 class ScriptRecord:
@@ -69,6 +76,9 @@ class ScriptRecord:
     full_path: str
     rel_file: str
     source_len: int
+    run_context_value: int | None = None
+    run_context_name: str = ""
+    exec_side: str = "unknown"
 
 
 @dataclass
@@ -87,6 +97,57 @@ class AttributeRecord:
     attr_name: str
     attr_type: str
     attr_value: str
+
+
+def _normalized_run_context(class_name: str, run_context_value: int | None) -> Tuple[int | None, str]:
+    if class_name not in {"Script", "LocalScript"}:
+        return None, ""
+
+    if run_context_value is None:
+        run_context_value = RUN_CONTEXT_LEGACY
+
+    return run_context_value, get_run_context_name(run_context_value)
+
+
+def _exec_side_for_script(class_name: str, run_context_value: int | None) -> str:
+    if class_name == "ModuleScript":
+        return "module"
+
+    normalized_value, _ = _normalized_run_context(class_name, run_context_value)
+    if normalized_value == RUN_CONTEXT_CLIENT:
+        return "client"
+    if normalized_value == RUN_CONTEXT_SERVER:
+        return "server"
+    if normalized_value == RUN_CONTEXT_PLUGIN:
+        return "plugin"
+    if normalized_value == RUN_CONTEXT_LEGACY:
+        if class_name == "LocalScript":
+            return "client"
+        if class_name == "Script":
+            return "server"
+    return "unknown"
+
+
+def _file_suffix_for_exec_side(exec_side: str) -> str:
+    if exec_side == "client":
+        return ".client.lua"
+    if exec_side == "server":
+        return ".server.lua"
+    if exec_side == "plugin":
+        return ".plugin.lua"
+    return ".lua"
+
+
+def _header_run_context(run_context_name: str, run_context_value: int | None) -> str:
+    if run_context_name and run_context_value is not None:
+        return f"{run_context_name} ({run_context_value})"
+    return "n/a"
+
+
+def _script_exec_side(record: ScriptRecord) -> str:
+    if record.exec_side and record.exec_side != "unknown":
+        return record.exec_side
+    return _exec_side_for_script(record.class_name, record.run_context_value)
 
 
 def _unique_child_name(parent_used: Dict[str, int], base_safe: str, referent: str) -> str:
@@ -179,13 +240,12 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
 
         if class_name in SCRIPT_CLASSES:
             src = get_source(props) or ""
-
-            if class_name == "Script":
-                suffix = ".server.lua"
-            elif class_name == "LocalScript":
-                suffix = ".client.lua"
-            else:
-                suffix = ".lua"
+            run_context_value, run_context_name = _normalized_run_context(
+                class_name,
+                get_run_context(props),
+            )
+            exec_side = _exec_side_for_script(class_name, run_context_value)
+            suffix = _file_suffix_for_exec_side(exec_side)
 
             parts = [sanitize_filename(p) for p in full_path.split("/")]
             rel = Path(*parts[:-1]) / f"{parts[-1]}{suffix}"
@@ -196,7 +256,9 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
                 "-- Extracted from RBXMX\n"
                 f"-- Class: {class_name}\n"
                 f"-- Name: {name}\n"
-                f"-- Path: {full_path}\n\n"
+                f"-- Path: {full_path}\n"
+                f"-- RunContext: {_header_run_context(run_context_name, run_context_value)}\n"
+                f"-- ExecSide: {exec_side}\n\n"
             )
 
             safe_write_text(out_file, header + src, encoding="utf-8")
@@ -208,6 +270,9 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
                     full_path=full_path,
                     rel_file=str(Path("scripts") / rel),
                     source_len=len(src),
+                    run_context_value=run_context_value,
+                    run_context_name=run_context_name,
+                    exec_side=exec_side,
                 )
             )
 
@@ -224,9 +289,27 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
 
     with safe_open_csv(bundle_dir / "INDEX.csv") as f:
         w = csv.writer(f)
-        w.writerow(["class", "name", "path", "file", "source_len"])
+        w.writerow([
+            "class",
+            "name",
+            "path",
+            "file",
+            "source_len",
+            "run_context_value",
+            "run_context_name",
+            "exec_side",
+        ])
         for s in scripts:
-            w.writerow([s.class_name, s.name, s.full_path, s.rel_file, s.source_len])
+            w.writerow([
+                s.class_name,
+                s.name,
+                s.full_path,
+                s.rel_file,
+                s.source_len,
+                s.run_context_value,
+                s.run_context_name,
+                s.exec_side,
+            ])
 
     with safe_open_csv(bundle_dir / "ATTRIBUTES.csv") as f:
         w = csv.writer(f)
@@ -290,6 +373,14 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
         ]
 
         nodes_json, edges_json = build_dependency_graph(dep_scripts, nodes)
+        scripts_by_path = {s.full_path: s for s in scripts}
+        for node in nodes_json:
+            script_meta = scripts_by_path.get(node.get("path") or node.get("id"))
+            if not script_meta:
+                continue
+            node["run_context_value"] = script_meta.run_context_value
+            node["run_context_name"] = script_meta.run_context_name or None
+            node["exec_side"] = script_meta.exec_side
 
         dep_payload = {
             "version": 1,
@@ -423,12 +514,28 @@ def generate_summary(
     """Return the content of SUMMARY.md as a string."""
 
     lines: List[str] = []
+    client_scripts = [s for s in scripts if _script_exec_side(s) == "client"]
+    server_scripts = [s for s in scripts if _script_exec_side(s) == "server"]
+    module_scripts = [s for s in scripts if _script_exec_side(s) == "module"]
+    plugin_scripts = [s for s in scripts if _script_exec_side(s) == "plugin"]
+    unknown_scripts = [s for s in scripts if _script_exec_side(s) == "unknown"]
 
     lines += [
         "# RBXBundle - Project Summary",
         "",
         f"**Source file:** `{source_file}`  ",
         f"**Scripts found:** {len(scripts)}  ",
+        f"**Client Scripts:** {len(client_scripts)}  ",
+        f"**Server Scripts:** {len(server_scripts)}  ",
+        f"**Modules:** {len(module_scripts)}  ",
+    ]
+
+    if plugin_scripts:
+        lines.append(f"**Plugin Scripts:** {len(plugin_scripts)}  ")
+    if unknown_scripts:
+        lines.append(f"**Unknown Scripts:** {len(unknown_scripts)}  ")
+
+    lines += [
         "",
         "---",
         "",
@@ -436,29 +543,39 @@ def generate_summary(
 
     lines += ["## Scripts", ""]
 
-    server_scripts = [s for s in scripts if s.class_name == "Script"]
-    local_scripts = [s for s in scripts if s.class_name == "LocalScript"]
-    module_scripts = [s for s in scripts if s.class_name == "ModuleScript"]
-
     if server_scripts:
         lines += ["### Server Scripts", ""]
         for s in server_scripts:
             empty_tag = " *(empty)*" if s.source_len == 0 else ""
-            lines.append(f"- `{s.full_path}`{empty_tag}")
+            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){empty_tag}")
         lines.append("")
 
-    if local_scripts:
+    if client_scripts:
         lines += ["### Client Scripts", ""]
-        for s in local_scripts:
+        for s in client_scripts:
             empty_tag = " *(empty)*" if s.source_len == 0 else ""
-            lines.append(f"- `{s.full_path}`{empty_tag}")
+            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){empty_tag}")
         lines.append("")
 
     if module_scripts:
         lines += ["### Module Scripts", ""]
         for s in module_scripts:
             empty_tag = " *(empty)*" if s.source_len == 0 else ""
-            lines.append(f"- `{s.full_path}`{empty_tag}")
+            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){empty_tag}")
+        lines.append("")
+
+    if plugin_scripts:
+        lines += ["### Plugin Scripts", ""]
+        for s in plugin_scripts:
+            empty_tag = " *(empty)*" if s.source_len == 0 else ""
+            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){empty_tag}")
+        lines.append("")
+
+    if unknown_scripts:
+        lines += ["### Unknown Scripts", ""]
+        for s in unknown_scripts:
+            empty_tag = " *(empty)*" if s.source_len == 0 else ""
+            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){empty_tag}")
         lines.append("")
 
     if not scripts:
@@ -522,16 +639,18 @@ def generate_summary(
         loc = e.get("loc") or {}
         line_info = f" (line {loc['line']})" if loc.get("line") else ""
 
-        if src_script.class_name == "LocalScript" and dest.startswith(SERVER_ONLY_PREFIXES):
+        src_exec_side = _script_exec_side(src_script)
+
+        if src_exec_side == "client" and dest.startswith(SERVER_ONLY_PREFIXES):
             boundary_alerts.append(
                 f"- [!] `{origin}` -> `{dest}`{line_info} "
-                "(LocalScript depending on server-only path)"
+                "(client-side script depending on server-only path)"
             )
 
-        if src_script.class_name == "Script" and dest.startswith(CLIENT_ONLY_PREFIXES):
+        if src_exec_side == "server" and dest.startswith(CLIENT_ONLY_PREFIXES):
             boundary_alerts.append(
                 f"- [!] `{origin}` -> `{dest}`{line_info} "
-                "(Script depending on client-only path)"
+                "(server-side script depending on client-only path)"
             )
 
     if boundary_alerts:

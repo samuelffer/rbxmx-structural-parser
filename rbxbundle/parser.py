@@ -9,6 +9,12 @@ import xml.etree.ElementTree as ET
 from .utils import local_tag
 
 LOG = logging.getLogger("rbxbundle")
+RUN_CONTEXT_NAMES = {
+    0: "Legacy",
+    1: "Server",
+    2: "Client",
+    3: "Plugin",
+}
 
 def get_properties_node(item: ET.Element) -> Optional[ET.Element]:
     for child in item:
@@ -39,6 +45,29 @@ def get_value(props: Optional[ET.Element]) -> Optional[str]:
         if p.attrib.get("name") == "Value":
             return (p.text or "").strip()
     return None
+
+def get_token(props: Optional[ET.Element], token_name: str) -> Optional[int]:
+    if props is None:
+        return None
+    for p in props:
+        if local_tag(p.tag) != "token" or p.attrib.get("name") != token_name:
+            continue
+        text = (p.text or "").strip()
+        if not text:
+            return None
+        try:
+            return int(text)
+        except ValueError:
+            return None
+    return None
+
+def get_run_context(props: Optional[ET.Element]) -> Optional[int]:
+    return get_token(props, "RunContext")
+
+def get_run_context_name(value: Optional[int]) -> str:
+    if value is None:
+        return "Unknown"
+    return RUN_CONTEXT_NAMES.get(value, "Unknown")
 
 def iter_top_level_items(roblox_root: ET.Element) -> List[ET.Element]:
     direct_items = [c for c in list(roblox_root) if local_tag(c.tag) == "Item"]

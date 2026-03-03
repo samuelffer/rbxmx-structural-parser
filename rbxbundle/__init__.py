@@ -8,7 +8,10 @@ from .generator import create_bundle, generate_summary, ScriptRecord, ContextRec
 from .parser import (
     get_name,
     get_properties_node,
+    get_run_context,
+    get_run_context_name,
     get_source,
+    get_token,
     get_value,
     iter_top_level_items,
     parse_attributes,
@@ -39,7 +42,10 @@ __all__ = [
     # Parser
     "get_name",
     "get_properties_node",
+    "get_run_context",
+    "get_run_context_name",
     "get_source",
+    "get_token",
     "get_value",
     "iter_top_level_items",
     "parse_attributes",
