@@ -17,13 +17,11 @@ It keeps the useful parts of the project structure:
 
 ### CLI build
 
-<!-- Replace with: ![CLI build demo](docs/demo-build.gif) -->
-`docs/demo-build.gif`
+Replace with: ![CLI build demo](docs/demo-build.gif)
 
 ### Interactive mode
 
-<!-- Replace with: ![Interactive mode demo](docs/demo-interactive.gif) -->
-`docs/demo-interactive.gif`
+![Interactive mode demo](docs/demo-interactive.gif)
 
 ## Why use it
 
