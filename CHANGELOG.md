@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2] - 2026-03-03
+
+### Fixed
+- Fixed config persistence defaults in argparse mode
+- Fixed corrupted CLI and summary output text
+- Added regression tests for CLI defaults and summary formatting
+
 ## [0.5.1] - 2026-03-02
 
 ### Fixed

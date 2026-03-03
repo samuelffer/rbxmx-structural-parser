@@ -132,5 +132,31 @@ class TestGenerateSummaryBoundaryAlerts(unittest.TestCase):
         self.assertIn("*(no client/server boundary alerts)*", summary)
 
 
+class TestGenerateSummaryFormatting(unittest.TestCase):
+    def test_summary_uses_clean_output_markers(self):
+        summary = generate_summary(
+            source_file="sample.rbxmx",
+            scripts=[],
+            contexts=[],
+            attributes=[],
+            nodes_json=[],
+            edges_json=[
+                {
+                    "from": "StarterPlayer/StarterPlayerScripts/ClientMain",
+                    "to": None,
+                    "kind": "dynamic",
+                    "expr": 'require(configFolder:WaitForChild(configName))',
+                    "confidence": 0.0,
+                    "loc": {"line": 8},
+                }
+            ],
+            include_context=False,
+        )
+
+        self.assertIn("# RBXBundle - Project Summary", summary)
+        self.assertIn("? `StarterPlayer/StarterPlayerScripts/ClientMain` -> *(unresolved)*", summary)
+        self.assertNotIn("â", summary)
+
+
 if __name__ == "__main__":
     unittest.main()

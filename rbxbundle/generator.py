@@ -127,12 +127,8 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
     attributes: List[AttributeRecord] = []
     hierarchy_lines: List[str] = []
 
-    # Instance index for dependency resolution
     nodes: Dict[str, Node] = {}
-
-    # We'll keep raw script sources (without our header)
     script_sources: Dict[str, str] = {}
-
     used_names_by_parent: Dict[str, Dict[str, int]] = {}
 
     def walk(item: ET.Element, parent_path: str, depth: int) -> None:
@@ -224,7 +220,6 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
     for it in top_items:
         walk(it, "", 0)
 
-    # Core outputs
     safe_write_text(bundle_dir / "HIERARCHY.txt", "\n".join(hierarchy_lines), encoding="utf-8")
 
     with safe_open_csv(bundle_dir / "INDEX.csv") as f:
@@ -278,10 +273,6 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
             lines.append("")
 
         safe_write_text(bundle_dir / "CONTEXT.txt", "\n".join(lines), encoding="utf-8")
-
-    # ---------------------------
-    # Dependency graph outputs
-    # ----------------------------
 
     nodes_json: List[dict] = []
     edges_json: List[dict] = []
@@ -352,7 +343,6 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
         nodes_json = []
         edges_json = []
 
-    # SUMMARY.md
     try:
         summary_md = generate_summary(
             source_file=in_path.name,
@@ -372,7 +362,6 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
             e,
         )
 
-    # ZIP bundle
     zip_path = output_dir / f"{in_path.stem}_bundle.zip"
     if zip_path.exists():
         zip_path.unlink()
@@ -404,10 +393,6 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
     return bundle_dir, zip_path, scripts
 
 
-# ---------------------------------------------------------------------------
-# SUMMARY.md generator
-# ---------------------------------------------------------------------------
-
 def _confidence_label(conf: float) -> str:
     if conf >= 0.9:
         return "high"
@@ -418,10 +403,10 @@ def _confidence_label(conf: float) -> str:
 
 def _confidence_icon(conf: float) -> str:
     if conf >= 0.9:
-        return "✅"
+        return "[ok]"
     if conf >= 0.6:
-        return "⚠️"
-    return "❓"
+        return "[!]"
+    return "?"
 
 
 def generate_summary(
@@ -440,7 +425,7 @@ def generate_summary(
     lines: List[str] = []
 
     lines += [
-        "# RBXBundle — Project Summary",
+        "# RBXBundle - Project Summary",
         "",
         f"**Source file:** `{source_file}`  ",
         f"**Scripts found:** {len(scripts)}  ",
@@ -449,11 +434,10 @@ def generate_summary(
         "",
     ]
 
-    # --- Scripts section ---
     lines += ["## Scripts", ""]
 
     server_scripts = [s for s in scripts if s.class_name == "Script"]
-    local_scripts  = [s for s in scripts if s.class_name == "LocalScript"]
+    local_scripts = [s for s in scripts if s.class_name == "LocalScript"]
     module_scripts = [s for s in scripts if s.class_name == "ModuleScript"]
 
     if server_scripts:
@@ -482,16 +466,15 @@ def generate_summary(
 
     lines += ["---", ""]
 
-    # --- Dependencies section ---
     lines += ["## Dependency Graph", ""]
 
     if dependency_analysis_failed:
-        lines += ["⚠️ Dependencies could not be analyzed; see `DEPENDENCIES_ERROR.txt`.", ""]
+        lines += ["[!] Dependencies could not be analyzed; see `DEPENDENCIES_ERROR.txt`.", ""]
 
     if not edges_json:
         lines += ["*(no require() calls detected)*", ""]
     else:
-        resolved   = [e for e in edges_json if e.get("to") is not None]
+        resolved = [e for e in edges_json if e.get("to") is not None]
         unresolved = [e for e in edges_json if e.get("to") is None]
 
         if resolved:
@@ -500,10 +483,10 @@ def generate_summary(
                 icon = _confidence_icon(e.get("confidence", 0.0))
                 conf_pct = int(e.get("confidence", 0.0) * 100)
                 kind = e.get("kind", "unknown")
-                loc  = e.get("loc") or {}
+                loc = e.get("loc") or {}
                 line_info = f" *(line {loc['line']})*" if loc.get("line") else ""
                 lines.append(
-                    f"- {icon} `{e['from']}` → `{e['to']}`  "
+                    f"- {icon} `{e['from']}` -> `{e['to']}`  "
                     f"[{kind}, confidence: {conf_pct}%]{line_info}"
                 )
             lines.append("")
@@ -511,17 +494,16 @@ def generate_summary(
         if unresolved:
             lines += ["### Unresolved / Dynamic", ""]
             for e in unresolved:
-                loc  = e.get("loc") or {}
+                loc = e.get("loc") or {}
                 line_info = f" *(line {loc['line']})*" if loc.get("line") else ""
                 lines.append(
-                    f"- ❓ `{e['from']}` → *(unresolved)*  "
+                    f"- ? `{e['from']}` -> *(unresolved)*  "
                     f"`{e.get('expr', '')}`{line_info}"
                 )
             lines.append("")
 
     lines += ["---", ""]
 
-    # --- Client/Server boundary alerts ---
     lines += ["## Client/Server Boundary Alerts", ""]
 
     scripts_by_path = {s.full_path: s for s in scripts}
@@ -542,13 +524,13 @@ def generate_summary(
 
         if src_script.class_name == "LocalScript" and dest.startswith(SERVER_ONLY_PREFIXES):
             boundary_alerts.append(
-                f"- ⚠️ `{origin}` -> `{dest}`{line_info} "
+                f"- [!] `{origin}` -> `{dest}`{line_info} "
                 "(LocalScript depending on server-only path)"
             )
 
         if src_script.class_name == "Script" and dest.startswith(CLIENT_ONLY_PREFIXES):
             boundary_alerts.append(
-                f"- ⚠️ `{origin}` -> `{dest}`{line_info} "
+                f"- [!] `{origin}` -> `{dest}`{line_info} "
                 "(Script depending on client-only path)"
             )
 
@@ -558,15 +540,13 @@ def generate_summary(
         lines.append("*(no client/server boundary alerts)*")
     lines += ["", "---", ""]
 
-
-    # --- Context section ---
     if include_context and contexts:
         lines += ["## Context Objects", ""]
 
-        remotes   = [c for c in contexts if c.details.get("kind") == "Remote"]
+        remotes = [c for c in contexts if c.details.get("kind") == "Remote"]
         bindables = [c for c in contexts if c.details.get("kind") == "Bindable"]
-        values    = [c for c in contexts if c.details.get("kind") == "ValueObject"]
-        others    = [c for c in contexts if c.details.get("kind") not in {"Remote", "Bindable", "ValueObject"}]
+        values = [c for c in contexts if c.details.get("kind") == "ValueObject"]
+        others = [c for c in contexts if c.details.get("kind") not in {"Remote", "Bindable", "ValueObject"}]
 
         if remotes:
             lines += [f"**RemoteEvents / RemoteFunctions** ({len(remotes)})", ""]
@@ -596,10 +576,8 @@ def generate_summary(
 
         lines += ["---", ""]
 
-    # --- Attributes section ---
     if attributes:
         lines += [f"## Attributes ({len(attributes)} total)", ""]
-        # group by owner
         by_owner: dict = {}
         for a in attributes:
             by_owner.setdefault(a.owner_path, []).append(a)
@@ -609,7 +587,6 @@ def generate_summary(
                 lines.append(f"  - `{a.attr_name}` [{a.attr_type}] = `{a.attr_value}`")
         lines += ["", "---", ""]
 
-    # --- Footer ---
     lines += [
         "## How to use this bundle",
         "",
