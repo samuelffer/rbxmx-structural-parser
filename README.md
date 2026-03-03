@@ -17,7 +17,7 @@ It keeps the useful parts of the project structure:
 
 ### CLI build
 
-Replace with: ![CLI build demo](docs/demo-build.gif)
+![CLI build demo](docs/demo-build-1.gif)
 
 ### Interactive mode
 
