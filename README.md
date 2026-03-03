@@ -1,222 +1,138 @@
 # rbxbundle
+
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
-![Works with Claude](https://img.shields.io/badge/works%20with-Claude%20%7C%20ChatGPT-blueviolet)
 
-`rbxbundle` parses Roblox model files (`.rbxmx`, `.rbxlx`) and produces a clean, structured bundle ready to be uploaded to any AI tool — saving tokens and giving the AI accurate context about your project.
+`rbxbundle` extracts Roblox `.rbxmx` and `.rbxlx` files into a compact bundle that is easier to inspect, version, and send to AI tools.
 
----
+It keeps the useful parts of the project structure:
+- scripts as `.lua` files
+- hierarchy and index files
+- attributes and optional context objects
+- dependency graph outputs
+- a `SUMMARY.md` designed to be the first file you share with an AI
 
-## Why does this exist?
+## Demo
 
-Roblox `.rbxmx` files are verbose XML. Sending one raw to an AI burns most of the context window on tags, not code. `rbxbundle` strips the noise and outputs only what matters: scripts, hierarchy, remotes, attributes, and a dependency graph.
+### CLI build
 
----
+<!-- Replace with: ![CLI build demo](docs/demo-build.gif) -->
+`docs/demo-build.gif`
+
+### Interactive mode
+
+<!-- Replace with: ![Interactive mode demo](docs/demo-interactive.gif) -->
+`docs/demo-interactive.gif`
+
+## Why use it
+
+Roblox XML exports are noisy. Sending raw `.rbxmx` files to an AI wastes context on markup instead of code and structure.
+
+`rbxbundle` turns that export into a smaller, readable package focused on what matters.
 
 ## Installation
 
-**Requirements:** Python 3.9+ — no external dependencies.
+Requirements: Python `3.9+`.
 
 ```bash
 git clone https://github.com/samuelffer/rbxbundle.git
 cd rbxbundle
-pip install -e .
+pip install .
 ```
 
-After installation the `rbxbundle` command is available globally.
-
-Alternatively, run without installing:
+Check the installed version:
 
 ```bash
-python cli.py
+rbxbundle --version
 ```
 
----
-
 ## Quick start
+
+Build a bundle:
 
 ```bash
 rbxbundle build MyModel.rbxmx
 ```
 
-Output lands in `output/MyModel_bundle/` and a ready-to-upload `.zip`.
-
----
-
-## CLI Reference
-
-### `rbxbundle build <file>`
-
-Parse a Roblox file and generate the full bundle.
-
-```
-rbxbundle build <file> [--output DIR] [--no-context] [--verbose]
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `<file>` | *(required)* | Path to `.rbxmx`, `.rbxlx`, `.xml`, or `.txt` file |
-| `--output`, `-o` | `output/` | Directory where the bundle is written |
-| `--no-context` | off | Skip `CONTEXT.txt` (RemoteEvents, ValueObjects, …) |
-| `--verbose`, `-v` | off | Enable debug-level logging |
-
-**Examples:**
-
-```bash
-# Basic usage
-rbxbundle build MyPlane.rbxmx
-
-# Custom output directory
-rbxbundle build MyPlane.rbxmx --output ./bundles
-
-# Skip context objects (smaller output)
-rbxbundle build MyPlane.rbxmx --no-context
-
-# Debug mode
-rbxbundle build MyPlane.rbxmx --verbose
-```
-
----
-
-### `rbxbundle inspect <file>`
-
-Print a quick summary of a file **without writing any output**.
-
-```
-rbxbundle inspect <file>
-```
+Inspect without writing files:
 
 ```bash
 rbxbundle inspect MyModel.rbxmx
 ```
 
-```
-File     : MyModel.rbxmx
-Size     : 142.3 KB
-Instances: 831
-Scripts  : 12  (Script / LocalScript / ModuleScript)
-Context  : 24  (RemoteEvent, Folder, ValueObject, …)
-```
-
-Useful to check what a file contains before running a full build.
-
----
-
-### `rbxbundle list [--dir DIR]`
-
-List all supported files in a directory.
-
-```
-rbxbundle list [--dir DIR]
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--dir`, `-d` | `input/` | Directory to scan |
+List supported files in a directory:
 
 ```bash
-rbxbundle list
 rbxbundle list --dir ./models
 ```
 
----
-
-### Interactive mode (no arguments)
-
-Running `rbxbundle` with no arguments starts an interactive prompt — pick a file from `input/` and answer a yes/no for context inclusion.
+Run interactive mode:
 
 ```bash
 rbxbundle
 ```
 
----
+## Main commands
 
-## Output files
+```text
+rbxbundle build <file> [--output DIR] [--no-context]
+rbxbundle inspect <file>
+rbxbundle list [--dir DIR]
+rbxbundle --mode interactive
+rbxbundle --mode argparse
+rbxbundle --version
+```
 
-Every build produces a folder (`<name>_bundle/`) and a `.zip` of the same contents.
+Supported input extensions:
+- `.rbxmx`
+- `.rbxlx`
+- `.xml`
+- `.txt` with valid Roblox XML content
 
-| File | Description |
-|------|-------------|
-| `SUMMARY.md` | Human-readable project overview — **start here when prompting an AI** |
-| `HIERARCHY.txt` | Full instance tree with class names |
-| `INDEX.csv` | Table of all scripts: path, type, source length |
-| `scripts/` | Every script as a `.lua` file with a header comment |
-| `CONTEXT.txt` | RemoteEvents, RemoteFunctions, BindableEvents, ValueObjects |
-| `ATTRIBUTES.txt` | All custom attributes in readable form |
-| `ATTRIBUTES.csv` | Same data in CSV for programmatic use |
-| `DEPENDENCIES.json` | Dependency graph: nodes (scripts) + edges (require calls) |
-| `EDGES.csv` | Flat edge list from the dependency graph |
+## Output
 
----
+Each build generates `<name>_bundle/` plus a `.zip` with the same contents.
 
-## How to use the bundle with an AI
+Core files:
+- `SUMMARY.md`: high-level project overview
+- `HIERARCHY.txt`: instance tree
+- `INDEX.csv`: script inventory
+- `scripts/`: extracted Lua files
+- `ATTRIBUTES.txt` and `ATTRIBUTES.csv`: extracted attributes
+- `DEPENDENCIES.json` and `EDGES.csv`: dependency graph outputs
 
-1. Run `rbxbundle build YourModel.rbxmx`
-2. Open the `.zip` (or the folder) in your file explorer
-3. Upload the `.zip` to your AI tool **or** paste individual files
-4. Start your prompt with `SUMMARY.md` — it gives the AI an instant overview
-5. Reference scripts by their path (e.g. `StarterCharacterScripts/Plane`)
+Optional or conditional files:
+- `CONTEXT.txt`: context objects when context export is enabled
+- `DEPENDENCIES_ERROR.txt`: written when dependency analysis fails but bundle generation still completes
 
-**Tip:** If the AI loses context in a long session, re-paste `SUMMARY.md` and `HIERARCHY.txt`.
+## Using with AI tools
 
----
+1. Run `rbxbundle build YourModel.rbxmx`.
+2. Upload the generated `.zip` or bundle folder contents.
+3. Start with `SUMMARY.md`.
+4. Reference scripts by their extracted path.
 
-## Using as a Python library
+## Using as a library
 
 ```python
-from rbxbundle import create_bundle, generate_summary
 from pathlib import Path
+
+from rbxbundle import create_bundle
 
 bundle_dir, zip_path, scripts = create_bundle(
     Path("MyModel.rbxmx"),
     output_dir=Path("output"),
     include_context=True,
 )
-
-print(f"Extracted {len(scripts)} scripts → {zip_path}")
 ```
 
-Other public exports:
-
-```python
-from rbxbundle import (
-    # Core
-    create_bundle, generate_summary,
-    # Records
-    ScriptRecord, ContextRecord, AttributeRecord,
-    # Parser primitives
-    get_name, get_source, iter_top_level_items, parse_attributes,
-    # Dependency graph
-    build_dependency_graph, find_require_calls, Node, ScriptInfo,
-    # Utilities
-    read_text, sanitize_filename, strip_junk_before_roblox,
-)
-```
-
----
-
-## Running tests
+## Tests
 
 ```bash
-python -m unittest discover tests/ -v
+python -m unittest discover tests -v
 ```
-
-No external packages required — stdlib only.
-
----
-
-## Supported file types
-
-| Extension | Description |
-|-----------|-------------|
-| `.rbxmx` | Roblox model file (XML) |
-| `.rbxlx` | Roblox place file (XML) |
-| `.xml` | Generic XML |
-| `.txt` | Plain text (must contain valid Roblox XML) |
-
----
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
