@@ -1,4 +1,8 @@
 # rbxbundle
+![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
+![Works with Claude](https://img.shields.io/badge/works%20with-Claude%20%7C%20ChatGPT-blueviolet)
 
 `rbxbundle` parses Roblox model files (`.rbxmx`, `.rbxlx`) and produces a clean, structured bundle ready to be uploaded to any AI tool — saving tokens and giving the AI accurate context about your project.
 
