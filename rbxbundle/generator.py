@@ -12,10 +12,10 @@ import xml.etree.ElementTree as ET
 
 from .deps import Node, ScriptInfo, build_dependency_graph
 from .parser import (
+    get_disabled,
     get_name,
     get_properties_node,
     get_run_context,
-    get_disabled,
     get_run_context_name,
     get_source,
     get_value,
@@ -64,6 +64,18 @@ CLIENT_ONLY_PREFIXES = (
     "ReplicatedFirst/",
 )
 
+PRIMARY_CLIENT_PREFIXES = (
+    "StarterPlayer/",
+    "StarterGui/",
+    "StarterPack/",
+)
+
+SEVERITY_ORDER = {
+    "ERROR": 0,
+    "WARN": 1,
+    "INFO": 2,
+}
+
 RUN_CONTEXT_LEGACY = 0
 RUN_CONTEXT_SERVER = 1
 RUN_CONTEXT_CLIENT = 2
@@ -80,6 +92,7 @@ class ScriptRecord:
     run_context_value: int | None = None
     run_context_name: str = ""
     exec_side: str = "unknown"
+    disabled: bool = False
 
 
 @dataclass
@@ -98,6 +111,14 @@ class AttributeRecord:
     attr_name: str
     attr_type: str
     attr_value: str
+
+
+@dataclass(frozen=True)
+class WarningRecord:
+    severity: str
+    path: str
+    code: str
+    message: str
 
 
 def _normalized_run_context(class_name: str, run_context_value: int | None) -> Tuple[int | None, str]:
@@ -122,7 +143,6 @@ def _exec_side_for_script(class_name: str, run_context_value: int | None) -> str
     if normalized_value == RUN_CONTEXT_PLUGIN:
         return "plugin"
     if normalized_value == RUN_CONTEXT_LEGACY:
-    disabled: bool = False
         if class_name == "LocalScript":
             return "client"
         if class_name == "Script":
@@ -150,6 +170,139 @@ def _script_exec_side(record: ScriptRecord) -> str:
     if record.exec_side and record.exec_side != "unknown":
         return record.exec_side
     return _exec_side_for_script(record.class_name, record.run_context_value)
+
+
+def _format_bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def _script_flags(record: ScriptRecord) -> str:
+    flags: List[str] = []
+    if record.disabled:
+        flags.append(" *(disabled)*")
+    if record.source_len == 0:
+        flags.append(" *(empty)*")
+    return "".join(flags)
+
+
+def _is_runtime_script(record: ScriptRecord) -> bool:
+    return record.class_name in {"Script", "LocalScript"}
+
+
+def _is_expected_client_path(path: str) -> bool:
+    return path.startswith(CLIENT_ONLY_PREFIXES)
+
+
+def _is_expected_server_path(path: str) -> bool:
+    return path.startswith(SERVER_ONLY_PREFIXES)
+
+
+def _entry_point_priority(record: ScriptRecord) -> Tuple[int, str]:
+    path = record.full_path
+    exec_side = _script_exec_side(record)
+
+    if exec_side == "server":
+        if path.startswith("ServerScriptService/"):
+            return (0, path)
+        if not _is_expected_server_path(path):
+            return (1, path)
+        return (2, path)
+
+    if exec_side == "client":
+        if path.startswith(PRIMARY_CLIENT_PREFIXES):
+            return (0, path)
+        if path.startswith("ReplicatedFirst/"):
+            return (1, path)
+        if not _is_expected_client_path(path):
+            return (2, path)
+        return (3, path)
+
+    return (99, path)
+
+
+def _warning_sort_key(record: WarningRecord) -> Tuple[int, str, str]:
+    return (SEVERITY_ORDER.get(record.severity, 99), record.path, record.message)
+
+
+def _collect_warnings(scripts: List[ScriptRecord], script_sources: Dict[str, str]) -> List[WarningRecord]:
+    warnings: List[WarningRecord] = []
+
+    for script in scripts:
+        if not _is_runtime_script(script):
+            continue
+
+        path = script.full_path
+        exec_side = _script_exec_side(script)
+        source = script_sources.get(path, "")
+
+        if script.run_context_value == RUN_CONTEXT_LEGACY and path.startswith("ReplicatedStorage/"):
+            warnings.append(
+                WarningRecord(
+                    severity="WARN",
+                    path=path,
+                    code="legacy-replicatedstorage",
+                    message="Legacy RunContext script under ReplicatedStorage may not execute without a loader.",
+                )
+            )
+
+        if exec_side == "client" and path.startswith("ServerScriptService/"):
+            warnings.append(
+                WarningRecord(
+                    severity="WARN",
+                    path=path,
+                    code="client-in-server",
+                    message="Client-side script under ServerScriptService is suspicious.",
+                )
+            )
+
+        if exec_side == "server" and path.startswith(PRIMARY_CLIENT_PREFIXES):
+            warnings.append(
+                WarningRecord(
+                    severity="WARN",
+                    path=path,
+                    code="server-in-client",
+                    message="Server-side script under a client startup container is suspicious.",
+                )
+            )
+
+        if exec_side == "server":
+            for pattern in ("Players.LocalPlayer", "PlayerGui", "OnClientEvent"):
+                if pattern in source:
+                    warnings.append(
+                        WarningRecord(
+                            severity="WARN",
+                            path=path,
+                            code="server-client-pattern",
+                            message=f"Server-side script contains client-only pattern `{pattern}`.",
+                        )
+                    )
+
+        if exec_side == "client":
+            for pattern in ("OnServerEvent", "PlayerAdded", "ServerStorage"):
+                if pattern in source:
+                    warnings.append(
+                        WarningRecord(
+                            severity="WARN",
+                            path=path,
+                            code="client-server-pattern",
+                            message=f"Client-side script contains server-only pattern `{pattern}`.",
+                        )
+                    )
+
+    return sorted(warnings, key=_warning_sort_key)
+
+
+def _render_warnings(warnings: List[WarningRecord]) -> str:
+    lines = ["# Bundle warnings", ""]
+    if not warnings:
+        lines.append("(no warnings)")
+        lines.append("")
+        return "\n".join(lines)
+
+    for warning in warnings:
+        lines.append(f"{warning.severity} | {warning.path} | {warning.message}")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _unique_child_name(parent_used: Dict[str, int], base_safe: str, referent: str) -> str:
@@ -202,10 +355,6 @@ def create_bundle(in_path: Path, *, output_dir: Path, include_context: bool) -> 
         name = get_name(props) or (referent or "Unnamed")
 
         base_safe = sanitize_filename(name)
-def _format_bool(value: bool) -> str:
-    return "true" if value else "false"
-
-
         used = used_names_by_parent.setdefault(parent_path, {})
         safe_name = _unique_child_name(used, base_safe, referent)
 
@@ -251,6 +400,7 @@ def _format_bool(value: bool) -> str:
                 get_run_context(props),
             )
             exec_side = _exec_side_for_script(class_name, run_context_value)
+            disabled = get_disabled(props)
             suffix = _file_suffix_for_exec_side(exec_side)
 
             parts = [sanitize_filename(p) for p in full_path.split("/")]
@@ -280,6 +430,7 @@ def _format_bool(value: bool) -> str:
                     run_context_value=run_context_value,
                     run_context_name=run_context_name,
                     exec_side=exec_side,
+                    disabled=disabled,
                 )
             )
 
@@ -305,6 +456,7 @@ def _format_bool(value: bool) -> str:
             "run_context_value",
             "run_context_name",
             "exec_side",
+            "disabled",
         ])
         for s in scripts:
             w.writerow([
@@ -316,6 +468,7 @@ def _format_bool(value: bool) -> str:
                 s.run_context_value,
                 s.run_context_name,
                 s.exec_side,
+                _format_bool(s.disabled),
             ])
 
     with safe_open_csv(bundle_dir / "ATTRIBUTES.csv") as f:
@@ -388,6 +541,7 @@ def _format_bool(value: bool) -> str:
             node["run_context_value"] = script_meta.run_context_value
             node["run_context_name"] = script_meta.run_context_name or None
             node["exec_side"] = script_meta.exec_side
+            node["disabled"] = script_meta.disabled
 
         dep_payload = {
             "version": 1,
@@ -441,6 +595,9 @@ def _format_bool(value: bool) -> str:
         nodes_json = []
         edges_json = []
 
+    warnings = _collect_warnings(scripts, script_sources)
+    safe_write_text(bundle_dir / "WARNINGS.txt", _render_warnings(warnings), encoding="utf-8")
+
     try:
         summary_md = generate_summary(
             source_file=in_path.name,
@@ -475,6 +632,7 @@ def _format_bool(value: bool) -> str:
             "INDEX.csv",
             "ATTRIBUTES.csv",
             "ATTRIBUTES.txt",
+            "WARNINGS.txt",
             "DEPENDENCIES.json",
             "EDGES.csv",
             "DEPENDENCIES_ERROR.txt",
@@ -482,7 +640,6 @@ def _format_bool(value: bool) -> str:
             p = bundle_dir / fname
             if p.exists():
                 z.write(p, arcname=p.name)
-            disabled = get_disabled(props)
 
         if include_context:
             p = bundle_dir / "CONTEXT.txt"
@@ -511,7 +668,6 @@ def _confidence_icon(conf: float) -> str:
 def generate_summary(
     *,
     source_file: str,
-                    disabled=disabled,
     scripts: List[ScriptRecord],
     contexts: List[ContextRecord],
     attributes: List[AttributeRecord],
@@ -523,11 +679,20 @@ def generate_summary(
     """Return the content of SUMMARY.md as a string."""
 
     lines: List[str] = []
+    disabled_scripts = [s for s in scripts if s.disabled]
     client_scripts = [s for s in scripts if _script_exec_side(s) == "client"]
     server_scripts = [s for s in scripts if _script_exec_side(s) == "server"]
     module_scripts = [s for s in scripts if _script_exec_side(s) == "module"]
     plugin_scripts = [s for s in scripts if _script_exec_side(s) == "plugin"]
     unknown_scripts = [s for s in scripts if _script_exec_side(s) == "unknown"]
+    enabled_server_entry_points = sorted(
+        [s for s in server_scripts if not s.disabled],
+        key=_entry_point_priority,
+    )
+    enabled_client_entry_points = sorted(
+        [s for s in client_scripts if not s.disabled],
+        key=_entry_point_priority,
+    )
 
     lines += [
         "# RBXBundle - Project Summary",
@@ -539,10 +704,12 @@ def generate_summary(
         f"**Modules:** {len(module_scripts)}  ",
     ]
 
+    if disabled_scripts:
+        lines.append(f"**Disabled Scripts:** {len(disabled_scripts)}  ")
+
     if plugin_scripts:
         lines.append(f"**Plugin Scripts:** {len(plugin_scripts)}  ")
     if unknown_scripts:
-            "disabled",
         lines.append(f"**Unknown Scripts:** {len(unknown_scripts)}  ")
 
     lines += [
@@ -551,42 +718,60 @@ def generate_summary(
         "",
     ]
 
+    lines += ["## Entry Points", ""]
+
+    lines += ["### Server Entry Points", ""]
+    if enabled_server_entry_points:
+        for s in enabled_server_entry_points:
+            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)})")
+    else:
+        lines.append("*(no enabled server entry points)*")
+    lines.append("")
+
+    lines += ["### Client Entry Points", ""]
+    if enabled_client_entry_points:
+        for s in enabled_client_entry_points:
+            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)})")
+    else:
+        lines.append("*(no enabled client entry points)*")
+    lines += ["", "---", ""]
+
+    if disabled_scripts:
+        lines += [f"## Disabled Scripts ({len(disabled_scripts)})", ""]
+        for s in sorted(disabled_scripts, key=lambda item: item.full_path):
+            lines.append(f"- `{s.full_path}` ({s.class_name}, {_script_exec_side(s)})")
+        lines += ["", "---", ""]
+
     lines += ["## Scripts", ""]
 
     if server_scripts:
-                _format_bool(s.disabled),
         lines += ["### Server Scripts", ""]
         for s in server_scripts:
-            empty_tag = " *(empty)*" if s.source_len == 0 else ""
-            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){empty_tag}")
+            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){_script_flags(s)}")
         lines.append("")
 
     if client_scripts:
         lines += ["### Client Scripts", ""]
         for s in client_scripts:
-            empty_tag = " *(empty)*" if s.source_len == 0 else ""
-            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){empty_tag}")
+            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){_script_flags(s)}")
         lines.append("")
 
     if module_scripts:
         lines += ["### Module Scripts", ""]
         for s in module_scripts:
-            empty_tag = " *(empty)*" if s.source_len == 0 else ""
-            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){empty_tag}")
+            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){_script_flags(s)}")
         lines.append("")
 
     if plugin_scripts:
         lines += ["### Plugin Scripts", ""]
         for s in plugin_scripts:
-            empty_tag = " *(empty)*" if s.source_len == 0 else ""
-            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){empty_tag}")
+            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){_script_flags(s)}")
         lines.append("")
 
     if unknown_scripts:
         lines += ["### Unknown Scripts", ""]
         for s in unknown_scripts:
-            empty_tag = " *(empty)*" if s.source_len == 0 else ""
-            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){empty_tag}")
+            lines.append(f"- `{s.full_path}` ({_script_exec_side(s)}){_script_flags(s)}")
         lines.append("")
 
     if not scripts:
@@ -627,7 +812,6 @@ def generate_summary(
                 lines.append(
                     f"- ? `{e['from']}` -> *(unresolved)*  "
                     f"`{e.get('expr', '')}`{line_info}"
-            node["disabled"] = script_meta.disabled
                 )
             lines.append("")
 
@@ -724,8 +908,9 @@ def generate_summary(
         "1. Upload the `.zip` file (or paste individual files) into your AI tool.",
         "2. Reference specific scripts by their path shown above.",
         "3. Use `HIERARCHY.txt` to understand instance structure.",
-        "4. Use `DEPENDENCIES.json` or `EDGES.csv` for script relationships.",
-        "5. Use `CONTEXT.txt` for RemoteEvent / ValueObject details.",
+        "4. Use `WARNINGS.txt` to spot likely execution or placement issues.",
+        "5. Use `DEPENDENCIES.json` or `EDGES.csv` for script relationships.",
+        "6. Use `CONTEXT.txt` for RemoteEvent / ValueObject details.",
         "",
         "> *Generated by [rbxbundle](https://github.com/samuelffer/rbxbundle)*",
         "",
