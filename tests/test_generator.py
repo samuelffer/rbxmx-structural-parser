@@ -61,7 +61,7 @@ class TestCreateBundleErrors(unittest.TestCase):
             self.assertIn("Error: missing node map", content)
 
             summary = (out_dir / "sample_bundle" / "SUMMARY.md").read_text(encoding="utf-8")
-            self.assertIn("Dependências não puderam ser analisadas", summary)
+            self.assertIn("Dependencies could not be analyzed; see `DEPENDENCIES_ERROR.txt`.", summary)
 
 class TestGenerateSummaryBoundaryAlerts(unittest.TestCase):
     def test_boundary_alert_for_localscript_to_server_path(self):
