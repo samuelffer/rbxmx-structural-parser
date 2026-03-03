@@ -10,6 +10,8 @@ import xml.etree.ElementTree as ET
 from rbxbundle.parser import (
     BinReader,
     decode_attributes_serialize,
+    get_bool,
+    get_disabled,
     get_name,
     get_properties_node,
     get_run_context,
@@ -33,6 +35,7 @@ def make_item(
     source: str = "",
     value: str | None = None,
     run_context: int | None = None,
+    disabled: bool | None = None,
 ) -> ET.Element:
     item = ET.Element("Item", attrib={"class": class_name})
     props = ET.SubElement(item, "Properties")
@@ -47,6 +50,9 @@ def make_item(
     if run_context is not None:
         token = ET.SubElement(props, "token", attrib={"name": "RunContext"})
         token.text = str(run_context)
+    if disabled is not None:
+        flag = ET.SubElement(props, "bool", attrib={"name": "Disabled"})
+        flag.text = "true" if disabled else "false"
     return item
 
 
@@ -149,6 +155,36 @@ class TestGetValue(unittest.TestCase):
         item = make_item("Folder", "F")
         props = get_properties_node(item)
         self.assertIsNone(get_value(props))
+
+
+# ---------------------------------------------------------------------------
+# get_bool / get_disabled
+# ---------------------------------------------------------------------------
+
+class TestGetBool(unittest.TestCase):
+    def test_reads_true_bool_property(self):
+        item = make_item("Script", "S", disabled=True)
+        props = get_properties_node(item)
+        self.assertTrue(get_bool(props, "Disabled"))
+
+    def test_invalid_bool_returns_none(self):
+        item = ET.Element("Item", attrib={"class": "Script"})
+        props = ET.SubElement(item, "Properties")
+        flag = ET.SubElement(props, "bool", attrib={"name": "Disabled"})
+        flag.text = "maybe"
+        self.assertIsNone(get_bool(props, "Disabled"))
+
+
+class TestGetDisabled(unittest.TestCase):
+    def test_defaults_to_false_when_missing(self):
+        item = make_item("Script", "S")
+        props = get_properties_node(item)
+        self.assertFalse(get_disabled(props))
+
+    def test_reads_false_from_bool_property(self):
+        item = make_item("Script", "S", disabled=False)
+        props = get_properties_node(item)
+        self.assertFalse(get_disabled(props))
 
 
 # ---------------------------------------------------------------------------
