@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.5] - 2026-03-03
+
+### Fixed
+- Fixed `build` and `inspect` so relative file names also resolve from the default input directory.
+- Fixed default Windows documents path detection for redirected folders such as OneDrive-backed Documents.
+
 ## [0.5.4] - 2026-03-03
 
 ### Fixed

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from rbxbundle import _cli
 
@@ -36,6 +38,22 @@ class TestCliConfigDefaults(unittest.TestCase):
     def test_default_workspace_root_ends_with_rbxbundle(self):
         root = _cli._resolve_default_workspace_root()
         self.assertEqual(root.name.lower(), "rbxbundle")
+
+    def test_resolve_cli_input_path_falls_back_to_default_input_dir(self):
+        with tempfile.TemporaryDirectory() as td:
+            input_dir = Path(td) / "input"
+            input_dir.mkdir(parents=True, exist_ok=True)
+            target = input_dir / "Sample.rbxmx"
+            target.write_text("<roblox />", encoding="utf-8")
+
+            old_input = _cli.DEFAULT_INPUT_DIR
+            try:
+                _cli.DEFAULT_INPUT_DIR = input_dir
+                resolved = _cli._resolve_cli_input_path("Sample.rbxmx")
+            finally:
+                _cli.DEFAULT_INPUT_DIR = old_input
+
+            self.assertEqual(resolved, target)
 
 
 class TestCliTextHelpers(unittest.TestCase):

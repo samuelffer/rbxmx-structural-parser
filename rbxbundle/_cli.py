@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import logging
 import os
@@ -31,13 +32,62 @@ LOG = logging.getLogger("rbxbundle")
 
 _ARGPARSE_COMMANDS = {"build", "inspect", "list", "help", "--help", "-h", "--version"}
 
+_FOLDERID_DOCUMENTS = ctypes.c_char_p if os.name != "nt" else None
+
+
+def _resolve_documents_dir() -> Path:
+    """Return the real user Documents folder, including redirected OneDrive paths."""
+    if os.name != "nt":
+        return Path.home() / "Documents"
+
+    try:
+        from ctypes import POINTER, byref, c_wchar_p, windll
+        from ctypes.wintypes import HRESULT
+        from uuid import UUID
+
+        class GUID(ctypes.Structure):
+            _fields_ = [
+                ("Data1", ctypes.c_uint32),
+                ("Data2", ctypes.c_uint16),
+                ("Data3", ctypes.c_uint16),
+                ("Data4", ctypes.c_ubyte * 8),
+            ]
+
+        def guid_from_string(value: str) -> GUID:
+            u = UUID(value)
+            data4 = (ctypes.c_ubyte * 8).from_buffer_copy(u.bytes[8:])
+            return GUID(u.time_low, u.time_mid, u.time_hi_version, data4)
+
+        documents_guid = guid_from_string("{FDD39AD0-238F-46AF-ADB4-6C85480369C7}")
+        path_ptr = c_wchar_p()
+        shell32 = windll.shell32
+        ole32 = windll.ole32
+        shell32.SHGetKnownFolderPath.argtypes = [ctypes.POINTER(GUID), ctypes.c_uint32, ctypes.c_void_p, POINTER(c_wchar_p)]
+        shell32.SHGetKnownFolderPath.restype = HRESULT
+
+        result = shell32.SHGetKnownFolderPath(byref(documents_guid), 0, None, byref(path_ptr))
+        if result == 0 and path_ptr.value:
+            documents_dir = Path(path_ptr.value)
+            ole32.CoTaskMemFree(path_ptr)
+            return documents_dir
+    except Exception:
+        pass
+
+    one_drive_docs = os.environ.get("ONEDRIVE")
+    if one_drive_docs:
+        candidate = Path(one_drive_docs) / "Documents"
+        if candidate.exists():
+            return candidate
+
+    return Path.home() / "Documents"
+
 
 def _resolve_default_workspace_root() -> Path:
     """Return the default workspace root for interactive/CLI file operations."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
 
-    documents_dir = Path.home() / "Documents"
+    documents_dir = _resolve_documents_dir()
     if documents_dir.exists():
         return documents_dir / "rbxbundle"
     return Path.home() / "rbxbundle"
@@ -216,6 +266,20 @@ def _scan_files(directory: Path) -> list[Path]:
         p for p in directory.iterdir()
         if p.is_file() and p.suffix.lower() in SUPPORTED_EXTS
     )
+
+
+def _resolve_cli_input_path(raw_path: str) -> Path:
+    """Resolve a CLI input file, falling back to the default input directory."""
+    candidate = Path(raw_path)
+    if candidate.exists():
+        return candidate
+
+    if not candidate.is_absolute():
+        fallback = DEFAULT_INPUT_DIR / candidate
+        if fallback.exists():
+            return fallback
+
+    return candidate
 
 
 def _inspect_file(in_path: Path) -> dict:
@@ -555,7 +619,7 @@ def _imode_settings(cfg: dict) -> dict:
 
 
 def cmd_build(args: argparse.Namespace) -> int:
-    in_path = Path(args.file)
+    in_path = _resolve_cli_input_path(args.file)
 
     if not in_path.exists():
         print(f"  Error: file not found: {in_path}.", file=sys.stderr)
@@ -596,7 +660,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:
-    in_path = Path(args.file)
+    in_path = _resolve_cli_input_path(args.file)
 
     if not in_path.exists():
         print(f"  Error: file not found: {in_path}.", file=sys.stderr)
