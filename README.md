@@ -33,6 +33,19 @@ Roblox XML exports are noisy and token-heavy. Sending a raw `.rbxmx` or `.xml` f
 
 ## Installation
 
+### Option A: Standalone `.exe`
+
+Download `rbxbundle.exe` from the GitHub Releases page.
+
+Recommended:
+1. Create a folder such as `Documents/rbxbundle/`
+2. Place `rbxbundle.exe` inside that folder
+3. Open the executable to use the interactive interface
+
+The standalone `.exe` uses its own folder as the working location, which makes it the easiest option for users who just want to download and use the tool.
+
+### Option B: Install with Python
+
 Requirements: Python `3.9+`.
 
 ```bash
@@ -47,7 +60,7 @@ Check the installed version:
 rbxbundle --version
 ```
 
-Default workspace paths:
+Default workspace paths for installed command-line usage:
 - Installed command-line usage defaults to `~/Documents/rbxbundle/`
 - Input files go in `~/Documents/rbxbundle/input/`
 - Generated bundles go to `~/Documents/rbxbundle/output/`
