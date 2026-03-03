@@ -127,4 +127,5 @@ jobs:
           files: |
             rbxbundle-v${{ env.VERSION }}-${{ matrix.artifact_os }}.zip
             sha256-${{ matrix.artifact_os }}.txt
-          generate_release_notes: true
+          body_path: CHANGELOG.md
+          generate_release_notes: false
