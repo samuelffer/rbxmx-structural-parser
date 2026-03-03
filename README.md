@@ -27,9 +27,9 @@ It keeps the useful parts of the project structure:
 
 ## Why use it
 
-Roblox XML exports are noisy. Sending raw `.rbxmx` files to an AI wastes context on markup instead of code and structure.
+Roblox XML exports are noisy and token-heavy. Sending a raw `.rbxmx` or `.xml` file to an AI wastes context on markup instead of code and structure.
 
-`rbxbundle` turns that export into a smaller, readable package focused on what matters.
+`rbxbundle` reduces that overhead by turning the export into a smaller, readable bundle focused on what matters, while trying to preserve the project context the AI actually needs.
 
 ## Installation
 
