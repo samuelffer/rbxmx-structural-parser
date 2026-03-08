@@ -354,15 +354,24 @@ def _clear() -> None:
     os.system("cls" if os.name == "nt" else "clear")
 
 
+def _banner_lines() -> list[str]:
+    width = min(_term_width(), 72)
+    title = clr(B + BLU, "RBXBundle")
+    version = clr(GRY, f"v{__version__}")
+    status = clr(YLW, "In Development")
+
+    plain_left = "RBXBundle"
+    plain_right = f"v{__version__}"
+    spacing = max(width - len(plain_left) - len(plain_right), 2)
+    header = f"{title}{' ' * spacing}{version}"
+    subheader = status
+    return [header, subheader]
+
+
 def _banner() -> None:
-    w = min(_term_width(), 72)
     print()
-    _print_hr("=", BLU)
-    title = "  RBX BUNDLE"
-    ver = f"v{__version__}  "
-    pad = w - len(title) - len(ver) - 2
-    print(f"{clr(B + BLU, title)}{' ' * max(pad, 1)}{clr(GRY, ver)}")
-    _print_hr("=", BLU)
+    for line in _banner_lines():
+        print(f"  {line}")
     print()
 
 
